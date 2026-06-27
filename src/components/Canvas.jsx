@@ -1,12 +1,9 @@
-import { useCallback, useMemo } from 'react'
+import { useCallback, useRef } from 'react'
 import {
   ReactFlow,
   Background,
   Controls,
-  MiniMap,
-  useNodesState,
-  useEdgesState,
-  addEdge as rfAddEdge,
+  useReactFlow,
 } from '@xyflow/react'
 import useStore from '../store/useStore'
 import PostitNode from './PostitNode'
@@ -23,14 +20,19 @@ const Canvas = () => {
 
   const board = boards.find(b => b.id === activeBoard) || { nodes: [], edges: [] }
 
+  // Track click timing to detect double-click on pane
+  const lastClickTime = useRef(0)
+  const lastClickPos = useRef({ x: 0, y: 0 })
+
+  const { screenToFlowPosition } = useReactFlow()
+
   const onNodeDragStop = useCallback((_, node) => {
     moveNode(node.id, node.position)
   }, [moveNode])
 
   const onConnect = useCallback((params) => {
-    // Show edge type picker near the target handle
     const targetEl = document.querySelector(`[data-id="${params.target}"]`)
-    const rect = targetEl?.getBoundingClientRect() || { left: window.innerWidth / 2, top: window.innerHeight / 2 }
+    const rect = targetEl?.getBoundingClientRect() || { left: window.innerWidth / 2, top: window.innerHeight / 2, width: 0 }
     showEdgeTypeMenu(
       { x: rect.left + rect.width / 2 - 100, y: rect.top - 60 },
       params.source,
@@ -38,21 +40,27 @@ const Canvas = () => {
     )
   }, [showEdgeTypeMenu])
 
-  const onDoubleClick = useCallback((e) => {
-    // Double-click on empty canvas = new post-it
-    if (e.target.classList.contains('react-flow__pane') || e.target.tagName === 'svg') {
-      const rect = e.currentTarget.getBoundingClientRect()
-      // We need canvas coordinates — use the transform from the flow
-      addNode({ x: e.clientX - rect.left - 140, y: e.clientY - rect.top - 60 })
+  // React Flow fires onPaneClick reliably — detect double-click manually
+  const onPaneClick = useCallback((e) => {
+    const now = Date.now()
+    const dx = Math.abs(e.clientX - lastClickPos.current.x)
+    const dy = Math.abs(e.clientY - lastClickPos.current.y)
+    if (now - lastClickTime.current < 350 && dx < 10 && dy < 10) {
+      const pos = screenToFlowPosition({ x: e.clientX, y: e.clientY })
+      addNode({ x: pos.x - 140, y: pos.y - 60 })
+      lastClickTime.current = 0
+    } else {
+      lastClickTime.current = now
+      lastClickPos.current = { x: e.clientX, y: e.clientY }
     }
-  }, [addNode])
+  }, [addNode, screenToFlowPosition])
 
   const onEdgeDoubleClick = useCallback((_, edge) => {
     if (confirm('Supprimer ce lien ?')) deleteEdge(edge.id)
   }, [deleteEdge])
 
   return (
-    <div style={{ flex: 1, position: 'relative' }} onDoubleClick={onDoubleClick}>
+    <div style={{ flex: 1, position: 'relative' }}>
       <ReactFlow
         key={activeBoard}
         nodes={board.nodes}
@@ -60,6 +68,7 @@ const Canvas = () => {
         nodeTypes={nodeTypes}
         onNodeDragStop={onNodeDragStop}
         onConnect={onConnect}
+        onPaneClick={onPaneClick}
         onEdgeDoubleClick={onEdgeDoubleClick}
         fitView
         minZoom={0.15}
@@ -73,11 +82,6 @@ const Canvas = () => {
           style={{ backgroundColor: '#c4a060' }}
         />
         <Controls />
-        <MiniMap
-          nodeColor={(n) => n.data?.color || '#f0c040'}
-          maskColor="rgba(0,0,0,0.4)"
-          style={{ background: '#1e1208', border: '1px solid #3d2810' }}
-        />
       </ReactFlow>
 
       {board.nodes.length === 0 && (
