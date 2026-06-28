@@ -20,6 +20,7 @@ const PostitNode = memo(({ data, id, selected }) => {
   }, [id, deleteNode])
 
   const previewHtml = marked.parse(data.content || '')
+  const isDone = data.title?.startsWith('✅')
 
   return (
     <div className="postit-node" style={{ '--pin-color': data.color }}>
@@ -30,11 +31,15 @@ const PostitNode = memo(({ data, id, selected }) => {
 
       <div
         className="postit-card"
-        style={{ '--pin-color': data.color, outline: selected ? '2px solid rgba(41,128,185,0.6)' : 'none' }}
+        style={{
+          '--pin-color': data.color,
+          outline: selected ? '2px solid rgba(41,128,185,0.6)' : 'none',
+          background: isDone ? '#e8f5e9' : undefined,
+        }}
         onDoubleClick={handleDoubleClick}
       >
         <div className="postit-body">
-          <div className="postit-title">{data.title || 'Sans titre'}</div>
+          <div className="postit-title" style={ isDone ? { color: '#1b5e20' } : undefined }>{data.title || 'Sans titre'}</div>
           <div
             className="postit-preview"
             dangerouslySetInnerHTML={{ __html: previewHtml }}
